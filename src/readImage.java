@@ -28,7 +28,6 @@ public class readImage
     while(imageCount < 100){
       try
       {
-        //String filename = "images\\images\\"+(imageCount+1)+".jpg";
         image = ImageIO.read(getClass().getResource("images/" + (imageCount+1) + ".jpg"));
         getIntensity(image, image.getHeight(), image.getWidth());
         getColorCode(image, image.getHeight(), image.getWidth());
