@@ -3,79 +3,141 @@ import java.util.List;
 public class colorCodeAndIntensity {
 
     double[][] normalisedFeatureMatrix = new double[100][89];
-    //25 + 64 bin ; 0-99 ->imgs 100->avg 101-> standard deviation
-    double[][] featureVectorMatrix = new double[102][89];
-    double[][] weightMatrix;
+    //25 + 64 bin ; 0-99 ->imgs
+    double[][] featureVectorMatrix = new double[100][89];
+    double[][] featureMatrixAvgDev = new double[2][89];
+    double[][] relevantImageMatrix;
+    double[][] weightMatrixAvgStd = new double[4][89]; // 0->avg of the column; 1->std deviation 2-> weight(1/std dev) 3-> normalised weight
 
     public colorCodeAndIntensity(){
 
     }
 
-    public void calcFeatureMatrix(int[][] histogramMatrix, int[][] colorCodeMatrix){
+    public void calcFeatureMatrix(double[][] histogramMatrix, double[][] colorCodeMatrix){
 
-        for(int i=0; i<100; i++){
-            for(int j=0; i<25; i++){
-
-                featureVectorMatrix[i][j] = histogramMatrix[i][j]/ histogramMatrix[i][26];
+        int intensityRows = histogramMatrix.length;
+        int intensityCols = histogramMatrix[0].length - 2;
+        for(int i=0; i<intensityRows; i++){
+            for(int j=0; i<intensityCols; i++){
+                featureVectorMatrix[i][j] = histogramMatrix[i][j]/ histogramMatrix[i][26];  // divide by sum
             }
         }
-        for(int i=0; i<100; i++){
+
+        int colorCodeRows = colorCodeMatrix.length;
+        int colorCodeCols = colorCodeMatrix[0].length - 1;
+        for(int i=0; i<colorCodeRows; i++){
             int k=0;
-            for(int j=25; j<89; j++){
+            for(int j=intensityCols; j<(intensityCols)+ (colorCodeCols); j++){
                 featureVectorMatrix[i][j] = colorCodeMatrix[i][k++]/colorCodeMatrix[i][64];
+                System.out.print(featureVectorMatrix[i][j]+", ");
             }
+            System.out.println();
         }
     }
     public void calc_Avg_Std(){
         //calculate average
-        for(int i=0; i<89; i++) {
+        int cols = featureVectorMatrix[0].length;
+        int rows = featureVectorMatrix.length;
+        for(int i=0; i<cols; i++) {
             double sum = 0;
-            for (int j=0; j < 100; j++) {
+            for (int j=0; j < rows; j++) {
                 sum += featureVectorMatrix[j][i];
             }
-            featureVectorMatrix[100][i] = sum/(100);
+            featureMatrixAvgDev[0][i] = sum/rows;
         }
 
         //calculate standard deviation
-        for(int i=0; i<89; i++){
+        for(int i=0; i<cols; i++){
             double sum =0;
-            for(int j=0; j<100; j++){
-                sum += Math.pow(featureVectorMatrix[j][i] - featureVectorMatrix[100][i], 2);
+            for(int j=0; j<rows; j++){
+                sum += Math.pow(featureVectorMatrix[j][i] - featureMatrixAvgDev[0][i], 2);
             }
-            featureVectorMatrix[101][i] = Math.sqrt(sum/(100-1));
+            featureMatrixAvgDev[1][i] = Math.sqrt(sum/(rows-1));
         }
     }
 
     public void calcNormalisedFeatureMatrix(){
-     for(int i=0; i<89; i++){
-         for(int j=0; j<100; j++){
-             normalisedFeatureMatrix[j][i] = (featureVectorMatrix[j][i] - featureVectorMatrix[100][i])/featureVectorMatrix[101][i];
+        int cols = featureVectorMatrix[0].length;
+        int rows = featureVectorMatrix.length;
+     for(int i=0; i<cols; i++){
+         for(int j=0; j<rows; j++){
+             //gaussian normalisation
+             double sub = (featureVectorMatrix[j][i] - featureMatrixAvgDev[0][i]);
+             normalisedFeatureMatrix[j][i] = sub /(featureMatrixAvgDev[1][i]);
          }
      }
+    /* for(int i=0; i<100; i++){
+         for(int j=0; j<89; j++){
+             System.out.print(normalisedFeatureMatrix[i][j] +", ");
+         }
+         System.out.println();
+     }*/
     }
 
-    public void updateWeight(List<Integer> li){
-        weightMatrix = new double[li.size()+2][89];  //li.size()+1 -> storing avg of each column/
-                                                     //li.size()+2 ->
+    public void extractFeatureMatrix(List<Integer> li){
+        int cols = normalisedFeatureMatrix[0].length;
+        relevantImageMatrix = new double[li.size()][cols];
+
+        int k=0;
         for(int imgNo : li) {
-            for (int i = 0; i < 89; i++) {
-                weightMatrix[imgNo][i] = normalisedFeatureMatrix[imgNo][i];
+            for (int i = 0; i < cols; i++) {
+                relevantImageMatrix[k++][i] = normalisedFeatureMatrix[imgNo][i];
             }
         }
 
         //calc avg of selected Imgs
-        for(int i=0; i<89; i++){
-            int sum = 0;
+        for(int i=0; i<cols; i++){
+            double sum = 0;
             for(int j=0; j<li.size(); j++){
-                sum += weightMatrix[j][i];
+                sum += relevantImageMatrix[j][i];
             }
-            int avg = sum;////(li.size());
-            weightMatrix[li.size()+1][i] = avg;
+            double avg = sum/(li.size());
+            weightMatrixAvgStd[0][i] = avg;
         }
-
+        int rows = featureVectorMatrix.length;
         //calc standard deviation
-
+        for (int i=0; i<cols; i++){
+            double sum = 0;
+            for(int j=0; j<rows; j++){
+                double diff = relevantImageMatrix[j][i] - weightMatrixAvgStd[0][i];
+                sum += Math.pow(diff, 2);
+            }
+            weightMatrixAvgStd[1][i] = Math.sqrt(sum/(rows-1));
+        }
     }
 
+  public void calcNormalisedWeight(){
+        int cols = featureVectorMatrix[0].length;
+        double min = 0;
+        for(int i=0; i<cols; i++){
+            // find min value of non zero std-dev
+            if(weightMatrixAvgStd[1][i] != 0) {
+                min = Math.min(min, weightMatrixAvgStd[1][i]);
+            }
+        }
+        //update std deviation
+        for(int i=0; i<cols; i++){
+            if(weightMatrixAvgStd[1][i] == 0 && weightMatrixAvgStd[0][i] == 0){
+                weightMatrixAvgStd[1][i] = 0;
+            }else if(weightMatrixAvgStd[1][i] == 0){
+                weightMatrixAvgStd[1][i] = (0.5 * min);
+            }
+
+        }
+
+        //calc Weight
+      double sumOfWeight = 0;
+        for(int i=0; i<cols; i++){
+            weightMatrixAvgStd[2][i] = 1/(weightMatrixAvgStd[1][i]);
+            sumOfWeight += weightMatrixAvgStd[2][i];
+        }
+        //normalised weight
+        for(int i=0; i<cols; i++){
+            weightMatrixAvgStd[3][i] = weightMatrixAvgStd[2][i] / sumOfWeight;
+        }
+  }
+   public void calcWeightedDistance(){
+
+   }
 
 }
