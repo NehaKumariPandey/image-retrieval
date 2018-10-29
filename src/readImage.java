@@ -12,19 +12,17 @@ import javax.imageio.ImageIO;
 
 public class readImage
 {
-  public colorCodeAndIntensity ci;
-  int imageCount = 0;
-  double[][] coOccurenceMatrix;
-  double[][] histogramMatrix = new double[100][27]; //0-24 -> bin; 25th  - store image size; 26-sum of bin value for each img
-  double[][] colorCodeMatrix = new double[100][65]; //0-63 bin; 64 - sum of bin value for each img
+  private ColorCodeAndIntensity ci;
+  private int imageCount = 0;
+  private double[][] histogramMatrix = new double[100][27]; //0-24 -> bin; 25th  - store image size; 26-sum of bin value for each img
+  private double[][] colorCodeMatrix = new double[100][65]; //0-63 bin; 64 - sum of bin value for each img
 
 
   /* Each image is retrieved from the file
    * Each retrieved image - image size(height*width) is calculated to compute Intensity and Color code method
    */
-  public readImage()
+  readImage()
   {
-    ci = new colorCodeAndIntensity();
     /*BufferedImage image = null;
     while(imageCount < 100){
       try
@@ -50,7 +48,6 @@ public class readImage
     // write files
     writeIntensity();
     writeColorCode();
-    relevanceFeedback();
   }
 
   /**
@@ -60,7 +57,7 @@ public class readImage
    * @param width
    */
   public void getIntensity(BufferedImage image, int height, int width){
-    coOccurenceMatrix = new double[height][width];
+      double[][] coOccurenceMatrix = new double[height][width];
       for(int row = 0; row<height-1; row++){
         for(int col=0; col<width-1; col++){
           Color c = new Color(image.getRGB(col, row));
@@ -72,18 +69,19 @@ public class readImage
 
   }
 
-  public void readIntensityFile(){
-    Scanner read;
+  private void readIntensityFile(){
+    BufferedReader reader;
     try {
-      read = new Scanner(new File("./intensity.csv"));
+      reader = new BufferedReader(new InputStreamReader(getClass().getResourceAsStream("intensity.csv")));
       int lineCount = 0;
       imageCount = 0;
-      while (read.hasNextLine()) {
+      String line;
+      while ((line = reader.readLine())!=null) {
         imageCount++;
         //read image from resource
         BufferedImage image = ImageIO.read(getClass().getResource("images/" + (imageCount) + ".jpg"));
         // read intensity values from source of truth excel file
-        String[] currentLine = read.nextLine().trim().split(",");
+        String[] currentLine = line.trim().split(",");
         int lineLength = currentLine.length;
         for (int i = 0; i < lineLength; i++) {
           histogramMatrix[lineCount][i] = Integer.parseInt(currentLine[i]);
@@ -98,23 +96,25 @@ public class readImage
   }
 
   private void readColorCodeFile(){
-    Scanner read;
+    BufferedReader reader;
     try{
-      read =new Scanner(new File ("./colorCode.csv"));
+      reader =new BufferedReader(new InputStreamReader(getClass().getResourceAsStream("colorCode.csv")));
       int lineCount = 0;
-      while (read.hasNextLine()) {
-        String[] currentLine = read.nextLine().trim().split(",");
+      String line;
+      while ((line = reader.readLine())!=null) {
+        String[] currentLine = line.trim().split(",");
         for (int i = 0; i < currentLine.length; i++) {
           colorCodeMatrix[lineCount][i] = Integer.parseInt(currentLine[i]);
         }
         lineCount++;
       }
     }
-    catch(FileNotFoundException EE){
+    catch(Exception EE){
       System.out.println("The file colorcode.txt does not exist " + EE);
     }
   }
-  public void populateHistogramMatrixforIntensity(int intensity, int imageSize){
+
+  private void populateHistogramMatrixforIntensity(int intensity, int imageSize){
     //0-24 -> bin; 25th column - store image size
     histogramMatrix[imageCount][25] = imageSize;
     if(intensity >=250){
@@ -123,6 +123,7 @@ public class readImage
       histogramMatrix[imageCount][intensity / 10] += 1;
     }
   }
+
   // for intensity
   private void populateBinSumValue(){
 
@@ -137,8 +138,9 @@ public class readImage
       histogramMatrix[i][26] = sum;
     }
   }
+
   //for color code
-  public void calcBinSumValue() {
+  private void calcBinSumValue() {
 
     int rows = colorCodeMatrix.length;
     int cols = colorCodeMatrix[0].length - 1;
@@ -204,30 +206,20 @@ public class readImage
   /**
    * This method writes the contents of the intensity matrix to a file called intensity.txt
    */
-  public void writeIntensity(){
+  protected void writeIntensity(){
     try {
       BufferedWriter bw = new BufferedWriter(new FileWriter("generatedIntensity.txt"));
-      for (int i = 0; i < histogramMatrix.length; i++) {
-        for (int j = 0; j < histogramMatrix[i].length; j++) {
-          bw.write(histogramMatrix[i][j] + ",");
+        for (double[] aHistogramMatrix : histogramMatrix) {
+            for (double anAHistogramMatrix : aHistogramMatrix) {
+                bw.write(anAHistogramMatrix + ",");
+            }
+            bw.newLine();
         }
-        bw.newLine();
-      }
       bw.flush();
     } catch (IOException ex) {
       System.out.println("Exception: File could not be created!! "+ex);
     }
   }
-
-  public void relevanceFeedback(){
-    ci.calcFeatureMatrix(histogramMatrix, colorCodeMatrix);
-    ci.calc_Avg_Std();
-    ci.calcNormalisedFeatureMatrix();
-    ci.extractFeatureMatrix(new ArrayList<Integer>());
-    ci.calcNormalisedWeight();
-    ci.calcWeightedDistance();
-  }
-
 
   public static void main(String[] args)
   {

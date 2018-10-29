@@ -28,12 +28,13 @@ public class CBIR extends JFrame {
     private JPanel panelRight;
     private JPanel panelLeft;
     private JPanel buttonPanel;
-    private Double [][] intensityMatrix = new Double [100][26];
-    private Double [][] colorCodeMatrix = new Double [100][64];
+    private double [][] intensityMatrix = new double [100][27]; //0-24 -> bin; 25th  - store image size; 26-sum of bin value for each img
+    private double [][] colorCodeMatrix = new double [100][65]; //0-63 bin; 64 - sum of bin value for each img
     private TreeMap <Double , Integer> map;
     int picNo = 0;
     int imageCount = 1; //keeps up with the number of images displayed since the first page.
     private boolean isRelevanceCheckEnabled;
+    private ColorCodeAndIntensity ci;
 
     /**
      * Create the text files by reading the input images and create the CBIR UI
@@ -62,8 +63,8 @@ public class CBIR extends JFrame {
         panelRight = new JPanel();
         panelLeft = new JPanel();
         buttonPanel = new JPanel();
-        gridLayoutRight = new GridLayout(4, 5, 30, 30);
-        gridLayoutLeft = new GridLayout(2, 1, 50, 50);
+        gridLayoutRight = new GridLayout(4, 5, 10, 50);
+        gridLayoutLeft = new GridLayout(2, 1, 5, 30);
         gridLayoutButton = new GridLayout(4, 4, 50, 50);
         gridLayoutNet = new GridLayout(1, 2, 10, 50);
 
@@ -74,6 +75,7 @@ public class CBIR extends JFrame {
         panelLeft.setBackground(Color.BLACK);
         panelLeft.setLayout(gridLayoutLeft);
         add(panelLeft);
+
         add(panelRight);
 
         photographLabel.setVerticalTextPosition(JLabel.BOTTOM);
@@ -115,7 +117,7 @@ public class CBIR extends JFrame {
         previousPage.addActionListener(new previousPageHandler());
         intensity.addActionListener(new intensityHandler());
         colorCode.addActionListener(new colorCodeHandler());
-        intensityAndColor.addActionListener(new intensityAndColorHandler());
+        intensityAndColor.addActionListener(new intensityAndColorCodeHandler());
         relevance.addActionListener(new relevanceHandler());
 
         // this centers the frame on the screen
@@ -125,35 +127,35 @@ public class CBIR extends JFrame {
         /*This for loop goes through the images in the database and stores them as icons and adds
          * the images to JButtons and then to the JButton array
         */
-        //InputStream in = getClass().getResourceAsStream("/file.txt");
-        //BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-
         for (int i = 1; i < 101; i++) {
             ImageIcon icon = new ImageIcon(getClass().getResource("images/" + i + ".jpg"));
-
             button[i] = new JButton(icon);
+            //ImageIcon resizedIcon = resizeIcon(icon, button[i].getWidth(), button[i].getHeight());
+            //button[i].setIcon(icon);
             //panelRight.add(button[i]);
             button[i].addActionListener(new IconButtonHandler(i, icon));
             buttonOrder[i] = i;
             imageSize[i] = icon.getIconHeight() * icon.getIconWidth();
         }
 
-        readIntensityFile();    // reads the intensity.txt file
-        readColorCodeFile();     // reads the colorcode.txt file
+        readIntensityFile();    // reads the generatedIntensity.txt file
+        readColorCodeFile();     // reads the generatedColorcode.txt file
+
+        ci = new ColorCodeAndIntensity(intensityMatrix, colorCodeMatrix);// computes the matrices required for the computation of relevance feedback
         displayFirstPage();
     }
 
     /*This method opens the intensity text file containing the intensity matrix with the histogram bin values for each image.
      * The contents of the matrix are processed and stored in a two dimensional array called intensityMatrix.
     */
-    public void readIntensityFile(){
+    protected void readIntensityFile(){
       Scanner read;
          try {
-             read = new Scanner(new File("./intensity.txt"));
+             read = new Scanner(new File("./generatedIntensity.txt"));
              int lineCount = 0;
              while (read.hasNextLine()) {
                  String[] currentLine = read.nextLine().trim().split(",");
-                 for (int i = 0; i < currentLine.length-1; i++) {
+                 for (int i = 0; i < currentLine.length; i++) {
                      intensityMatrix[lineCount][i] = Double.parseDouble(currentLine[i]);
                  }
                  lineCount++;
@@ -171,11 +173,11 @@ public class CBIR extends JFrame {
     private void readColorCodeFile(){
       Scanner read;
          try{
-           read =new Scanner(new File ("./colorcode.txt"));
+           read =new Scanner(new File ("./generatedColorCode.txt"));
              int lineCount = 0;
              while (read.hasNextLine()) {
                  String[] currentLine = read.nextLine().trim().split(",");
-                 for (int i = 0; i < currentLine.length-1; i++) {
+                 for (int i = 0; i < currentLine.length; i++) {
                      colorCodeMatrix[lineCount][i] = Double.parseDouble(currentLine[i]);
                  }
                  lineCount++;
@@ -295,16 +297,10 @@ public class CBIR extends JFrame {
           if(picNo <= 0 ){
               return;
           }
-          double [] distance = new double [101];
           map = new TreeMap<Double, Integer>();
-          double d = 0;
-          int compareImage = 0;
           int pic = (picNo - 1);
-          int picIntensity = 0;
-         // double picSize = imageSize[pic];  //101
 
           for(int i=0; i<imageSize.length-1; i++){
-              //distance[i] = computeManhattanDistForIntensity(pic, i);
               map.put(computeManhattanDistForIntensity(pic, i), i+1);
           }
           rankImages();
@@ -341,7 +337,7 @@ public class CBIR extends JFrame {
      * compared to all the other image's intensity bin values and a score is determined for how well the images compare.
      * The images are then arranged from most similar to the least.
      */
-    private class intensityAndColorHandler implements ActionListener{
+    private class intensityAndColorCodeHandler implements ActionListener{
 
         public void actionPerformed( ActionEvent e) {
             if (picNo <= 0) {
@@ -357,18 +353,19 @@ public class CBIR extends JFrame {
                     try {
                         Component component = button[imageButNo].getComponent(0);
                         if (((JCheckBox) component).isSelected()) {
-                            relevantImages.add(i);
+                            relevantImages.add(imageButNo-1);
                         }
                     } catch (Exception ex) {
-                        System.out.println("SEVERE! Exception encountered while reading relevant images. Stacktrace " + ex);
+                        System.out.println("SEVERE! Exception encountered while processing relevant marked images. Stacktrace " + ex);
                     }
                 }
             }
-            System.out.println(String.format("Found %d relevant images", relevantImages.size()));
+            System.out.println(String.format("%d relevant images selected", relevantImages.size()));
+            ci.computeNormalizedWeights(relevantImages);
             map = new TreeMap<>();
             int pic = (picNo - 1);
             for (int i = 0; i < imageSize.length - 1; i++) {
-                map.put(computeManhattanDistForColourCode(pic, i), i + 1);
+                map.put(ci.computeRelevanceFeedbackDistance(pic, i), i + 1);
             }
             rankImages();
         }
@@ -389,6 +386,15 @@ public class CBIR extends JFrame {
         }
     }
 
+    private class CheckBoxActionListener implements ActionListener {
+	    public void actionPerformed(ActionEvent e) {
+            AbstractButton abstractButton = (AbstractButton) e.getSource();
+            if (abstractButton.getModel().isSelected()) {
+                abstractButton.setEnabled(false);
+            }
+        }
+    }
+
     /**
      * Add relevance checkboxes if relevance check is enabled. Otherwise remove
      * @param imageButNo
@@ -397,6 +403,7 @@ public class CBIR extends JFrame {
         // only proceed if the checkbox component hasn't been added to the button
         if (isRelevanceCheckEnabled && button[imageButNo].getComponents().length == 0) {
             JCheckBox rel_button = new JCheckBox("Relevant");
+            rel_button.addActionListener(new CheckBoxActionListener());
             rel_button.setBackground(Color.BLACK);
             rel_button.setForeground(Color.WHITE);
             //rel_button.addActionListener(new checkBoxActionListner());
@@ -435,6 +442,20 @@ public class CBIR extends JFrame {
     }
 
     /**
+     * Resize image icon to button
+     * @param icon
+     * @param resizedWidth
+     * @param resizedHeight
+     * @return
+     */
+    private ImageIcon resizeIcon(ImageIcon icon, int resizedWidth, int resizedHeight) {
+        Image img = icon.getImage();
+        Image resizedImage = img.getScaledInstance(resizedWidth, resizedHeight,  java.awt.Image.SCALE_SMOOTH);
+        return new ImageIcon(resizedImage);
+    }
+
+
+    /**
      * Repaints the current displayed page
      */
     private void repaintCurrentPage() {
@@ -460,10 +481,10 @@ public class CBIR extends JFrame {
      * Ranks images based on the action selected
      */
     private void rankImages() {
-        // set the value of buttonOrder with proximity to the selecye
+        // set the value of buttonOrder with proximity to the selected image
         int i=1;
-        for(Map.Entry<Double, Integer> key : map.entrySet()){
-            buttonOrder[i++]= key.getValue();
+        for(Map.Entry<Double, Integer> mapEntry : map.entrySet()) {
+            buttonOrder[i++]= mapEntry.getValue();
         }
         //repaint the display page
         imageCount=1;
